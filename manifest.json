@@ -1,0 +1,35 @@
+{
+  "name": "Heidi Crypto Portfolio Dashboard",
+  "short_name": "Crypto Dashboard",
+  "description": "Dashboard de portafolio cripto con sincronización en tiempo real con Google Sheets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070c",
+  "theme_color": "#7a47f3",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><circle cx='96' cy='96' r='96' fill='%237a47f3'/><text x='96' y='130' font-size='100' text-anchor='middle' fill='white' font-family='Arial'>₿</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><circle cx='256' cy='256' r='256' fill='%237a47f3'/><text x='256' y='350' font-size='280' text-anchor='middle' fill='white' font-family='Arial'>₿</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Ver Dashboard",
+      "short_name": "Dashboard",
+      "description": "Ver el dashboard principal",
+      "url": "/",
+      "icons": []
+    }
+  ]
+}
