@@ -14,10 +14,13 @@ const state = {
 };
 
 // Inicializar app
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 Iniciando HEIDI Crypto Portfolio...');
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
   initApp();
-});
+}
+
+console.log('🚀 Script cargado - HEIDI Crypto Portfolio');
 
 async function initApp() {
   // Cargar tema guardado
@@ -48,41 +51,63 @@ async function initApp() {
 
 async function loadData() {
   try {
+    console.log('📊 Iniciando carga de datos...');
     updateStatus('Sincronizando...', 'loading');
-    console.log('📊 Cargando datos desde Google Sheets...');
     
     const sheetId = DASHBOARD_CONFIG.SHEET_ID;
     const sheetName = DASHBOARD_CONFIG.SHEETS.PORTAFOLIO;
     const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
     
+    console.log('🌐 Fetching:', url);
     const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
     const text = await response.text();
+    console.log('✅ Respuesta recibida, parseando...');
     
     // Parsear respuesta de Google Sheets
     const jsonText = text.substring(47).slice(0, -2);
     const json = JSON.parse(jsonText);
     
-    console.log('✅ Datos recibidos:', json.table.rows.length, 'filas');
+    console.log('✅ Datos parseados:', json.table.rows.length, 'filas');
     
     // Procesar datos
     processData(json);
+    console.log('✅ Datos procesados');
     
     // Actualizar UI
+    console.log('📊 Actualizando KPIs...');
     updateKPIs();
+    
+    console.log('📈 Renderizando gráficos...');
     renderCharts();
+    
+    console.log('📅 Renderizando watchlist...');
     renderWatchlist();
+    
+    console.log('📊 Renderizando tabla...');
     renderTable();
     
     // Actualizar estado
     state.lastUpdate = new Date();
-    document.getElementById('lastUpdate').textContent = formatTime(state.lastUpdate);
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    if (lastUpdateEl) {
+      lastUpdateEl.textContent = formatTime(state.lastUpdate);
+    }
     updateStatus('En línea', 'online');
     
     console.log('✅ Dashboard actualizado correctamente');
     
   } catch (error) {
     console.error('❌ Error cargando datos:', error);
+    console.error('Stack:', error.stack);
     updateStatus('Error de conexión', 'offline');
+    
+    // Mostrar error en la UI
+    alert('Error cargando datos: ' + error.message);
   }
 }
 
