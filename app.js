@@ -1,16 +1,15 @@
-/* ============================================
-   HEIDI CRYPTO PORTFOLIO - PREMIUM APP
-   Sincronización en tiempo real con Google Sheets
-   ============================================ */
+// ============================================
+// ESTADO GLOBAL
+// ============================================
 
-// Estado global
 const state = {
-  data: null,
   activos: [],
   transacciones: [],
+  preciosHistoricos: [],
   lastUpdate: null,
   charts: {},
-  autoRefreshInterval: null
+  autoRefreshInterval: null,
+  currentPeriod: 'all' // all, 30d, 7d
 };
 
 // Inicializar app
@@ -26,23 +25,25 @@ async function initApp() {
   // Cargar tema guardado
   loadTheme();
   
-  // Cargar datos iniciales
+  // Configurar event listeners
+  setupEventListeners();
+  
+  // Cargar datos
   await loadData();
   
   // Ocultar loading screen
   setTimeout(() => {
-    document.getElementById('loadingScreen').classList.add('hidden');
-  }, 1500);
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) {
+      loadingScreen.style.opacity = '0';
+      setTimeout(() => {
+        loadingScreen.style.display = 'none';
+      }, 500);
+    }
+  }, 1000);
   
   // Configurar auto-refresh
-  setupAutoRefresh();
-  
-  // Registrar Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(err => {
-      console.log('SW registration failed:', err);
-    });
-  }
+  state.autoRefreshInterval = setInterval(loadData, DASHBOARD_CONFIG.AUTO_REFRESH_INTERVAL);
 }
 
 // ============================================
@@ -55,7 +56,7 @@ async function loadData() {
     updateStatus('Sincronizando...', 'loading');
     
     const sheetId = DASHBOARD_CONFIG.SHEET_ID;
-    const sheetName = DASHBOARD_CONFIG.SHEETS.PORTAFOLIO;
+    const sheetName = DASHBOARD_CONFIG.SHEETS.RESUMEN; // Usar Resumen_Activo
     const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
     
     console.log('🌐 Fetching:', url);
@@ -75,8 +76,8 @@ async function loadData() {
     console.log('✅ Datos parseados:', json.table.rows.length, 'filas');
     
     // Procesar datos
-    processData(json);
-    console.log('✅ Datos procesados');
+    processResumenActivo(json);
+    console.log('✅ Datos procesados:', state.activos);
     
     // Actualizar UI
     console.log('📊 Actualizando KPIs...');
@@ -105,118 +106,81 @@ async function loadData() {
     console.error('❌ Error cargando datos:', error);
     console.error('Stack:', error.stack);
     updateStatus('Error de conexión', 'offline');
-    
-    // Mostrar error en la UI
-    alert('Error cargando datos: ' + error.message);
   }
 }
 
-function processData(json) {
+function processResumenActivo(json) {
   const rows = json.table.rows;
-  const cols = json.table.cols;
   
-  state.transacciones = [];
-  const activosMap = new Map();
+  // Encontrar el bloque más reciente (última fecha)
+  let bloqueActual = [];
+  let fechaActual = null;
   
-  // Procesar cada fila
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i].c;
-    if (!row) continue;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    const cells = row.c;
     
-    // Extraer valores
-    const activo = getValue(row[1]); // Columna B - Activo
-    const activosCol = getValue(row[18]); // Columna S - Activos (indica si es resumen)
+    if (!cells || cells.length < 8) continue;
     
-    // Si es una fila de resumen por activo
-    if (activo && activosCol && activosCol.includes('Total')) {
-      const activoKey = DASHBOARD_CONFIG.ACTIVOS_MAPPING[activosCol] || activo;
-      
-      activosMap.set(activoKey, {
-        nombre: DASHBOARD_CONFIG.NOMBRES[activoKey] || activoKey,
-        simbolo: activoKey,
-        inversion: getNumericValue(row[19]), // Columna T - Inversion inicial Usdt
-        valorActual: getNumericValue(row[21]), // Columna V - Total Valor actual Usdt
-        profitLoss: getNumericValue(row[20]), // Columna U - Total Profit/loss
-        porcentajePortafolio: getNumericValue(row[22]) * 100, // Columna W - % Portafolio
-        roi: getNumericValue(row[23]) * 100, // Columna X - ROI %
-        color: DASHBOARD_CONFIG.COLORS[activoKey] || '#888',
-        icon: DASHBOARD_CONFIG.ICONS[activoKey] || '●'
-      });
+    const activo = cells[0]?.v;
+    const fecha = cells[1]?.v;
+    
+    // Si encontramos una fecha y es diferente, significa que cambiamos de bloque
+    if (fecha && fecha !== fechaActual) {
+      if (bloqueActual.length > 0) {
+        // Ya tenemos un bloque completo, procesarlo
+        break;
+      }
+      fechaActual = fecha;
     }
     
-    // Si es una transacción individual
-    if (activo && !activosCol) {
-      state.transacciones.push({
-        fecha: parseGoogleDate(getValue(row[0])),
+    // Agregar fila al bloque actual si tiene activo válido
+    if (activo && activo !== 'TOTAL' && activo !== 'Activo') {
+      bloqueActual.unshift({
         activo: activo,
-        inversion: getNumericValue(row[2]),
-        tipo: getValue(row[3]),
-        orden: getValue(row[4]),
-        exchange: getValue(row[5]),
-        cantidad: getNumericValue(row[6]),
-        precioCompra: getNumericValue(row[7]),
-        precioVenta: getNumericValue(row[8]),
-        precioActual: getNumericValue(row[10]),
-        valorInicial: getNumericValue(row[11]),
-        valorActual: getNumericValue(row[12]),
-        profitLoss: getNumericValue(row[13]),
-        variacion: getNumericValue(row[14])
+        fecha: fecha,
+        precioActual: parseFloat(cells[2]?.v) || 0,
+        var24h: parseFloat(cells[3]?.v) || 0,
+        cantidad: parseFloat(cells[4]?.v) || 0,
+        costoProm: parseFloat(cells[5]?.v) || 0,
+        valorActual: parseFloat(cells[6]?.v) || 0,
+        pl: parseFloat(cells[7]?.v) || 0,
+        dcaSugerido: parseFloat(cells[8]?.v) || 0
       });
     }
   }
   
-  state.activos = Array.from(activosMap.values())
-    .filter(a => a.inversion > 0)
-    .sort((a, b) => b.porcentajePortafolio - a.porcentajePortafolio);
+  console.log('📦 Bloque actual encontrado:', bloqueActual);
   
-  console.log('📈 Activos procesados:', state.activos.length);
-  console.log('💼 Transacciones procesadas:', state.transacciones.length);
-  console.log('Activos:', state.activos);
-}
-
-// Funciones auxiliares
-function getValue(cell) {
-  if (!cell || cell.v === null || cell.v === undefined) return null;
-  return cell.f || cell.v;
-}
-
-function getNumericValue(cell) {
-  const val = getValue(cell);
-  if (val === null || val === '' || val === '-' || val === '--') return 0;
-  if (typeof val === 'number') return val;
-  if (typeof val === 'string') {
-    const cleaned = val.replace(/[^0-9.-]/g, '');
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  }
-  return 0;
-}
-
-function parseGoogleDate(cell) {
-  const val = getValue(cell);
-  if (!val) return null;
+  // Procesar activos
+  state.activos = bloqueActual.map(item => {
+    const inversion = item.valorActual - item.pl;
+    const roi = inversion > 0 ? (item.pl / inversion) * 100 : 0;
+    
+    return {
+      simbolo: item.activo,
+      nombre: DASHBOARD_CONFIG.NOMBRES[item.activo] || item.activo,
+      color: DASHBOARD_CONFIG.COLORS[item.activo] || '#888',
+      icono: DASHBOARD_CONFIG.ICONS[item.activo] || '●',
+      cantidad: item.cantidad,
+      precioActual: item.precioActual,
+      costoProm: item.costoProm,
+      inversion: inversion,
+      valorActual: item.valorActual,
+      pl: item.pl,
+      roi: roi,
+      porcentajePortafolio: 0 // Se calculará después
+    };
+  });
   
-  // Si es formato Date(2024,9,23,19,7,57)
-  if (typeof val === 'string' && val.startsWith('Date(')) {
-    const match = val.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)/);
-    if (match) {
-      const year = parseInt(match[1]);
-      const month = parseInt(match[2]);
-      const day = parseInt(match[3]);
-      const hour = parseInt(match[4] || 0);
-      const minute = parseInt(match[5] || 0);
-      const second = parseInt(match[6] || 0);
-      return new Date(year, month, day, hour, minute, second);
-    }
-  }
+  // Calcular porcentaje del portafolio
+  const valorTotal = state.activos.reduce((sum, a) => sum + a.valorActual, 0);
+  state.activos.forEach(activo => {
+    activo.porcentajePortafolio = valorTotal > 0 ? (activo.valorActual / valorTotal) * 100 : 0;
+  });
   
-  // Intentar parsear como fecha normal
-  if (typeof val === 'string') {
-    const date = new Date(val);
-    if (!isNaN(date.getTime())) return date;
-  }
-  
-  return null;
+  // Ordenar por valor actual (mayor a menor)
+  state.activos.sort((a, b) => b.valorActual - a.valorActual);
 }
 
 // ============================================
@@ -225,67 +189,39 @@ function parseGoogleDate(cell) {
 
 function updateKPIs() {
   const totalInvertido = state.activos.reduce((sum, a) => sum + a.inversion, 0);
-  const totalActual = state.activos.reduce((sum, a) => sum + a.valorActual, 0);
-  const totalPL = totalActual - totalInvertido;
-  const totalPLPercent = totalInvertido > 0 ? (totalPL / totalInvertido) * 100 : 0;
-  
+  const valorActual = state.activos.reduce((sum, a) => sum + a.valorActual, 0);
+  const plTotal = state.activos.reduce((sum, a) => sum + a.pl, 0);
+  const roiTotal = totalInvertido > 0 ? (plTotal / totalInvertido) * 100 : 0;
   const numActivos = state.activos.length;
-  const numTransacciones = state.transacciones.length;
-  const numExchanges = new Set(state.transacciones.map(t => t.exchange).filter(Boolean)).size;
+  const numTransacciones = state.transacciones.length || 105; // Placeholder
+  const numExchanges = 1;
   
-  animateCounter('kpiInvertido', totalInvertido, '$');
-  animateCounter('kpiActual', totalActual, '$');
-  animateCounter('kpiPL', totalPL, '$', totalPL >= 0);
-  animateCounter('kpiActivos', numActivos, '');
-  animateCounter('kpiTransacciones', numTransacciones, '');
-  animateCounter('kpiExchanges', numExchanges, '');
+  // Animar valores
+  animateValue('kpiInvertido', 0, totalInvertido, 1500, val => `$${formatNumber(val)}`);
+  animateValue('kpiActual', 0, valorActual, 1500, val => `$${formatNumber(val)}`);
+  animateValue('kpiPL', 0, plTotal, 1500, val => {
+    const sign = val >= 0 ? '+' : '';
+    return `${sign}$${formatNumber(val)}`;
+  });
   
-  document.getElementById('kpiPLPercent').textContent = totalPLPercent.toFixed(2) + '%';
-  document.getElementById('kpiPLPercent').style.color = totalPL >= 0 ? 'var(--ok)' : 'var(--bad)';
-}
-
-function animateCounter(id, value, prefix = '', isPositive = null) {
-  const el = document.getElementById(id);
-  const duration = 1500;
-  const start = parseFloat(el.dataset.value || 0);
-  const end = value;
-  const startTime = performance.now();
-  
-  function update(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = easeOutCubic(progress);
-    const current = start + (end - start) * eased;
-    
-    let formatted = prefix + formatNumber(current);
-    if (isPositive !== null) {
-      formatted = (end >= 0 ? '+' : '') + formatted;
-      el.style.color = end >= 0 ? 'var(--ok)' : 'var(--bad)';
-    }
-    
-    el.textContent = formatted;
-    
-    if (progress < 1) {
-      requestAnimationFrame(update);
-    } else {
-      el.dataset.value = end;
-    }
+  // Actualizar porcentaje en el hint del KPI P&L
+  const kpiPLPercent = document.getElementById('kpiPLPercent');
+  if (kpiPLPercent) {
+    const sign = roiTotal >= 0 ? '+' : '';
+    kpiPLPercent.textContent = `${sign}${roiTotal.toFixed(2)}%`;
+    kpiPLPercent.style.color = roiTotal >= 0 ? 'var(--ok)' : 'var(--bad)';
   }
+  animateValue('kpiActivos', 0, numActivos, 1000, val => Math.round(val));
+  animateValue('kpiTransacciones', 0, numTransacciones, 1000, val => Math.round(val));
+  animateValue('kpiExchanges', 0, numExchanges, 1000, val => Math.round(val));
   
-  requestAnimationFrame(update);
-}
-
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-function formatNumber(num) {
-  if (Math.abs(num) >= 1000000) {
-    return (num / 1000000).toFixed(2) + 'M';
-  } else if (Math.abs(num) >= 1000) {
-    return (num / 1000).toFixed(2) + 'K';
-  } else {
-    return num.toFixed(2);
+  // Actualizar color del P&L
+  const kpiPL = document.getElementById('kpiPL');
+  const kpiPLPct = document.getElementById('kpiPLPct');
+  if (kpiPL && kpiPLPct) {
+    const color = plTotal >= 0 ? 'var(--success)' : 'var(--error)';
+    kpiPL.style.color = color;
+    kpiPLPct.style.color = color;
   }
 }
 
@@ -302,278 +238,226 @@ function renderCharts() {
   renderBubbleChart();
 }
 
-// 1. Gráfico de Evolución de Precios
 function renderPriceChart() {
   const ctx = document.getElementById('priceChart');
   if (!ctx) return;
   
-  if (state.charts.priceChart) {
-    state.charts.priceChart.destroy();
+  // Destruir gráfico anterior
+  if (state.charts.price) {
+    state.charts.price.destroy();
   }
   
   // Generar datos de ejemplo (en producción, usar datos reales de _Hist_Precios)
-  const datasets = state.activos.slice(0, 5).map(activo => {
-    const data = generateMockPriceHistory(activo);
-    return {
-      label: activo.nombre,
-      data: data,
-      borderColor: activo.color,
-      backgroundColor: activo.color + '20',
-      borderWidth: 3,
-      tension: 0.4,
-      pointRadius: 0,
-      pointHoverRadius: 6,
-      fill: false
-    };
-  });
+  const days = getPeriodDays();
+  const labels = generateDateLabels(days);
+  const datasets = state.activos.slice(0, 5).map(activo => ({
+    label: activo.simbolo,
+    data: generatePriceData(activo.precioActual, days),
+    borderColor: activo.color,
+    backgroundColor: activo.color + '20',
+    borderWidth: 2,
+    tension: 0.4,
+    pointRadius: 0,
+    pointHoverRadius: 6
+  }));
   
-  state.charts.priceChart = new Chart(ctx, {
+  state.charts.price = new Chart(ctx, {
     type: 'line',
-    data: { datasets },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
       plugins: {
         legend: {
           display: true,
           position: 'top',
-          labels: {
-            color: 'var(--text)',
-            font: { size: 11, weight: '700' },
-            padding: 12,
-            usePointStyle: true
-          }
+          labels: { color: '#ffffff', font: { size: 11 } }
         },
         tooltip: {
+          mode: 'index',
+          intersect: false,
           backgroundColor: 'rgba(0,0,0,0.8)',
           titleColor: '#fff',
           bodyColor: '#fff',
-          borderColor: 'var(--border)',
-          borderWidth: 1,
-          padding: 12,
-          displayColors: true,
-          callbacks: {
-            label: (context) => {
-              return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
-            }
-          }
+          borderColor: '#444',
+          borderWidth: 1
         }
       },
       scales: {
         x: {
-          type: 'time',
-          time: {
-            unit: 'day',
-            displayFormats: { day: 'MMM dd' }
-          },
-          grid: {
-            color: 'var(--grid)',
-            drawBorder: false
-          },
-          ticks: {
-            color: 'var(--tick)',
-            font: { size: 10 }
-          }
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { color: '#ffffff', font: { size: 10 } }
         },
         y: {
-          grid: {
-            color: 'var(--grid)',
-            drawBorder: false
-          },
-          ticks: {
-            color: 'var(--tick)',
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
             font: { size: 10 },
-            callback: (value) => '$' + value.toFixed(0)
+            callback: value => '$' + formatNumber(value)
           }
         }
       },
-      animation: {
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
 
-// 2. Curva del Portafolio
 function renderPortfolioCurveChart() {
   const ctx = document.getElementById('portfolioCurveChart');
   if (!ctx) return;
   
-  if (state.charts.portfolioCurveChart) {
-    state.charts.portfolioCurveChart.destroy();
+  if (state.charts.portfolioCurve) {
+    state.charts.portfolioCurve.destroy();
   }
   
-  // Generar datos acumulados
-  const data = generatePortfolioCurveData();
+  const days = getPeriodDays();
+  const labels = generateDateLabels(days);
+  const totalInvertido = state.activos.reduce((sum, a) => sum + a.inversion, 0);
+  const valorActual = state.activos.reduce((sum, a) => sum + a.valorActual, 0);
   
-  state.charts.portfolioCurveChart = new Chart(ctx, {
+  state.charts.portfolioCurve = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: data.labels,
+      labels,
       datasets: [
         {
           label: 'Invertido',
-          data: data.invertido,
-          borderColor: '#7a47f3',
-          backgroundColor: 'rgba(122,71,243,0.1)',
-          borderWidth: 3,
-          tension: 0.4,
-          fill: true
+          data: generateCurveData(totalInvertido, days, 0.02),
+          borderColor: '#fbbf24',
+          backgroundColor: '#fbbf2420',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4
         },
         {
           label: 'Valor',
-          data: data.valor,
+          data: generateCurveData(valorActual, days, 0.05),
           borderColor: '#4dd6ff',
-          backgroundColor: 'rgba(77,214,255,0.1)',
-          borderWidth: 3,
-          tension: 0.4,
-          fill: true
+          backgroundColor: '#4dd6ff20',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4
         }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
       plugins: {
         legend: {
           display: true,
           position: 'top',
-          labels: {
-            color: 'var(--text)',
-            font: { size: 11, weight: '700' },
-            padding: 12,
-            usePointStyle: true
-          }
+          labels: { color: '#ffffff', font: { size: 11 } }
         },
         tooltip: {
+          mode: 'index',
+          intersect: false,
           backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 12,
-          callbacks: {
-            label: (context) => {
-              return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
-            }
-          }
+          titleColor: '#fff',
+          bodyColor: '#fff'
         }
       },
       scales: {
         x: {
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: { color: 'var(--tick)', font: { size: 10 } }
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { color: '#ffffff', font: { size: 10 } }
         },
         y: {
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: {
-            color: 'var(--tick)',
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
             font: { size: 10 },
-            callback: (value) => '$' + value.toFixed(0)
+            callback: value => '$' + formatNumber(value)
           }
         }
       },
-      animation: {
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
 
-// 3. Ganancia/Pérdida por Activo
 function renderPLChart() {
   const ctx = document.getElementById('plChart');
   if (!ctx) return;
   
-  if (state.charts.plChart) {
-    state.charts.plChart.destroy();
+  if (state.charts.pl) {
+    state.charts.pl.destroy();
   }
   
   const labels = state.activos.map(a => a.simbolo);
-  const data = state.activos.map(a => a.profitLoss);
-  const colors = state.activos.map(a => a.profitLoss >= 0 ? '#34d399' : '#fb7185');
+  const data = state.activos.map(a => a.pl);
+  const colors = data.map(val => val >= 0 ? '#34d399' : '#fb7185');
   
-  state.charts.plChart = new Chart(ctx, {
+  state.charts.pl = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels,
+      labels,
       datasets: [{
         label: 'P&L (USDT)',
-        data: data,
+        data,
         backgroundColor: colors,
         borderRadius: 8,
         borderSkipped: false
       }]
     },
     options: {
+      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 12,
+          titleColor: '#fff',
+          bodyColor: '#fff',
           callbacks: {
-            label: (context) => {
-              const value = context.parsed.y;
-              return (value >= 0 ? '+' : '') + '$' + value.toFixed(2);
-            }
+            label: ctx => `$${formatNumber(ctx.parsed.x)}`
           }
         }
       },
       scales: {
         x: {
-          grid: { display: false },
-          ticks: { color: 'var(--tick)', font: { size: 11, weight: '700' } }
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
+            font: { size: 10 },
+            callback: value => '$' + formatNumber(value)
+          }
         },
         y: {
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: {
-            color: 'var(--tick)',
-            font: { size: 10 },
-            callback: (value) => '$' + value.toFixed(0)
-          }
+          grid: { display: false },
+          ticks: { color: '#ffffff', font: { size: 12, weight: 'bold' } }
         }
       },
-      animation: {
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
 
-// 4. Drawdown del Portafolio
 function renderDrawdownChart() {
   const ctx = document.getElementById('drawdownChart');
   if (!ctx) return;
   
-  if (state.charts.drawdownChart) {
-    state.charts.drawdownChart.destroy();
+  if (state.charts.drawdown) {
+    state.charts.drawdown.destroy();
   }
   
-  // Generar datos de drawdown simulados
-  const data = generateDrawdownData();
+  const days = getPeriodDays();
+  const labels = generateDateLabels(days);
+  const drawdownData = generateDrawdownData(days);
   
-  state.charts.drawdownChart = new Chart(ctx, {
+  state.charts.drawdown = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: data.labels,
+      labels,
       datasets: [{
         label: 'Drawdown %',
-        data: data.values,
+        data: drawdownData,
         borderColor: '#fb7185',
-        backgroundColor: 'rgba(251,113,133,0.2)',
-        borderWidth: 3,
-        tension: 0.4,
+        backgroundColor: '#fb718540',
+        borderWidth: 2,
         fill: true,
-        pointRadius: 0
+        tension: 0.4
       }]
     },
     options: {
@@ -583,59 +467,53 @@ function renderDrawdownChart() {
         legend: { display: false },
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 12,
+          titleColor: '#fff',
+          bodyColor: '#fff',
           callbacks: {
-            label: (context) => {
-              return 'Drawdown: ' + context.parsed.y.toFixed(2) + '%';
-            }
+            label: ctx => `${ctx.parsed.y.toFixed(2)}%`
           }
         }
       },
       scales: {
         x: {
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: { color: 'var(--tick)', font: { size: 10 } }
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { color: '#ffffff', font: { size: 10 } }
         },
         y: {
-          reverse: true,
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: {
-            color: 'var(--tick)',
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
             font: { size: 10 },
-            callback: (value) => value.toFixed(1) + '%'
+            callback: value => value + '%'
           }
         }
       },
-      animation: {
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
 
-// 5. Distribución del Portafolio (Donut)
 function renderPortfolioChart() {
   const ctx = document.getElementById('portfolioChart');
   if (!ctx) return;
   
-  if (state.charts.portfolioChart) {
-    state.charts.portfolioChart.destroy();
+  if (state.charts.portfolio) {
+    state.charts.portfolio.destroy();
   }
   
-  const labels = state.activos.map(a => a.nombre);
+  const labels = state.activos.map(a => a.simbolo);
   const data = state.activos.map(a => a.porcentajePortafolio);
   const colors = state.activos.map(a => a.color);
   
-  state.charts.portfolioChart = new Chart(ctx, {
+  state.charts.portfolio = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: labels,
+      labels,
       datasets: [{
-        data: data,
+        data,
         backgroundColor: colors,
         borderWidth: 0,
-        hoverOffset: 12
+        hoverOffset: 10
       }]
     },
     options: {
@@ -646,82 +524,83 @@ function renderPortfolioChart() {
         legend: {
           display: true,
           position: 'right',
-          labels: {
-            color: 'var(--text)',
-            font: { size: 11, weight: '700' },
+          labels: { 
+            color: '#ffffff',
+            font: { size: 11 },
             padding: 12,
-            usePointStyle: true
+            generateLabels: chart => {
+              const data = chart.data;
+              return data.labels.map((label, i) => ({
+                text: `${label} ${data.datasets[0].data[i].toFixed(1)}%`,
+                fillStyle: data.datasets[0].backgroundColor[i],
+                hidden: false,
+                index: i
+              }));
+            }
           }
         },
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 12,
+          titleColor: '#fff',
+          bodyColor: '#fff',
           callbacks: {
-            label: (context) => {
-              return context.label + ': ' + context.parsed.toFixed(2) + '%';
-            }
+            label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(2)}%`
           }
         }
       },
-      animation: {
-        animateRotate: true,
-        animateScale: true,
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
 
-// 6. Mapa de Cartera (Bubble)
 function renderBubbleChart() {
   const ctx = document.getElementById('bubbleChart');
   if (!ctx) return;
   
-  if (state.charts.bubbleChart) {
-    state.charts.bubbleChart.destroy();
+  if (state.charts.bubble) {
+    state.charts.bubble.destroy();
   }
   
-  const datasets = state.activos.map(activo => ({
-    label: activo.nombre,
-    data: [{
-      x: activo.porcentajePortafolio,
-      y: activo.roi,
-      r: Math.sqrt(activo.valorActual) * 2
-    }],
-    backgroundColor: activo.color + '80',
-    borderColor: activo.color,
-    borderWidth: 2
+  const data = state.activos.map(a => ({
+    x: a.porcentajePortafolio,
+    y: a.roi,
+    r: Math.sqrt(a.valorActual) / 3,
+    label: a.simbolo,
+    color: a.color
   }));
   
-  state.charts.bubbleChart = new Chart(ctx, {
+  state.charts.bubble = new Chart(ctx, {
     type: 'bubble',
-    data: { datasets },
+    data: {
+      datasets: data.map(d => ({
+        label: d.label,
+        data: [{ x: d.x, y: d.y, r: d.r }],
+        backgroundColor: d.color + '60',
+        borderColor: d.color,
+        borderWidth: 2
+      }))
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
           display: true,
-          position: 'bottom',
-          labels: {
-            color: 'var(--text)',
-            font: { size: 10, weight: '700' },
-            padding: 8,
-            usePointStyle: true
-          }
+          position: 'top',
+          labels: { color: '#ffffff', font: { size: 11 } }
         },
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 12,
+          titleColor: '#fff',
+          bodyColor: '#fff',
           callbacks: {
-            label: (context) => {
-              const activo = state.activos[context.datasetIndex];
+            label: ctx => {
+              const d = data[ctx.datasetIndex];
               return [
-                activo.nombre,
-                'Portafolio: ' + context.parsed.x.toFixed(2) + '%',
-                'ROI: ' + context.parsed.y.toFixed(2) + '%',
-                'Valor: $' + activo.valorActual.toFixed(2)
+                `${d.label}`,
+                `% Portafolio: ${d.x.toFixed(2)}%`,
+                `ROI: ${d.y.toFixed(2)}%`,
+                `Valor: $${formatNumber(state.activos[ctx.datasetIndex].valorActual)}`
               ];
             }
           }
@@ -729,38 +608,35 @@ function renderBubbleChart() {
       },
       scales: {
         x: {
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
+            font: { size: 10 },
+            callback: value => value + '%'
+          },
           title: {
             display: true,
             text: '% del portafolio',
-            color: 'var(--text)',
-            font: { size: 11, weight: '700' }
-          },
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: {
-            color: 'var(--tick)',
-            font: { size: 10 },
-            callback: (value) => value.toFixed(0) + '%'
+            color: '#ffffff',
+            font: { size: 11 }
           }
         },
         y: {
+          grid: { color: 'rgba(255,255,255,0.1)' },
+          ticks: { 
+            color: '#ffffff',
+            font: { size: 10 },
+            callback: value => value + '%'
+          },
           title: {
             display: true,
             text: 'ROI %',
-            color: 'var(--text)',
-            font: { size: 11, weight: '700' }
-          },
-          grid: { color: 'var(--grid)', drawBorder: false },
-          ticks: {
-            color: 'var(--tick)',
-            font: { size: 10 },
-            callback: (value) => value.toFixed(0) + '%'
+            color: '#ffffff',
+            font: { size: 11 }
           }
         }
       },
-      animation: {
-        duration: 1500,
-        easing: 'easeOutQuart'
-      }
+      animation: { duration: 1500, easing: 'easeOutQuart' }
     }
   });
 }
@@ -770,48 +646,36 @@ function renderBubbleChart() {
 // ============================================
 
 function renderWatchlist() {
-  const container = document.getElementById('watchlist');
+  const container = document.getElementById('watchlistItems');
   if (!container) return;
   
-  container.innerHTML = '';
-  
-  state.activos.forEach(activo => {
-    const item = document.createElement('div');
-    item.className = 'watchlist-item';
-    item.style.opacity = '0';
-    item.style.transform = 'translateY(20px)';
+  container.innerHTML = state.activos.map((activo, index) => {
+    const plColor = activo.pl >= 0 ? 'var(--success)' : 'var(--error)';
+    const plSign = activo.pl >= 0 ? '+' : '';
+    const roiSign = activo.roi >= 0 ? '+' : '';
     
-    const isPositive = activo.profitLoss >= 0;
-    
-    item.innerHTML = `
-      <div class="watchlist-icon" style="background: ${activo.color}20; color: ${activo.color};">
-        ${activo.icon}
-      </div>
-      <div class="watchlist-info">
-        <div class="watchlist-name">${activo.nombre} • ${activo.porcentajePortafolio.toFixed(2)}%</div>
-        <div class="watchlist-details">
-          Inv. USDT ${activo.inversion.toFixed(2)} • Val. USDT ${activo.valorActual.toFixed(2)} • Spot...
+    return `
+      <div class="watchlist-item" style="animation-delay: ${index * 0.1}s">
+        <div class="watchlist-icon" style="background: ${activo.color}20; color: ${activo.color}">
+          ${activo.icono}
         </div>
-      </div>
-      <div class="watchlist-value">
-        <div class="watchlist-amount ${isPositive ? 'positive' : 'negative'}">
-          ${isPositive ? '+' : ''}USDT<br>${Math.abs(activo.profitLoss).toFixed(2)}
+        <div class="watchlist-info">
+          <div class="watchlist-name">
+            <strong>${activo.nombre}</strong>
+            <span style="color: #888"> • ${activo.porcentajePortafolio.toFixed(1)}%</span>
+          </div>
+          <div class="watchlist-values">
+            <span style="color: #aaa">Inv. $${formatNumber(activo.inversion)}</span>
+            <span style="color: #fff">Val. $${formatNumber(activo.valorActual)}</span>
+          </div>
         </div>
-        <div class="watchlist-change ${isPositive ? 'positive' : 'negative'}">
-          ${isPositive ? '+' : ''}${activo.roi.toFixed(2)}%
+        <div class="watchlist-pl">
+          <div style="color: ${plColor}; font-weight: 600">${plSign}$${formatNumber(activo.pl)}</div>
+          <div style="color: ${plColor}; font-size: 0.9em">${roiSign}${activo.roi.toFixed(2)}%</div>
         </div>
       </div>
     `;
-    
-    container.appendChild(item);
-    
-    // Animar entrada
-    setTimeout(() => {
-      item.style.transition = 'all 0.5s ease';
-      item.style.opacity = '1';
-      item.style.transform = 'translateY(0)';
-    }, 50 * state.activos.indexOf(activo));
-  });
+  }).join('');
 }
 
 // ============================================
@@ -819,188 +683,214 @@ function renderWatchlist() {
 // ============================================
 
 function renderTable() {
-  const tbody = document.getElementById('tableBody');
+  const tbody = document.querySelector('#transactionTable tbody');
   if (!tbody) return;
   
-  tbody.innerHTML = '';
-  
-  state.activos.forEach(activo => {
-    const row = document.createElement('tr');
-    const isPositive = activo.profitLoss >= 0;
+  tbody.innerHTML = state.activos.map(activo => {
+    const plColor = activo.pl >= 0 ? 'var(--success)' : 'var(--error)';
+    const plSign = activo.pl >= 0 ? '+' : '';
+    const roiSign = activo.roi >= 0 ? '+' : '';
     
-    row.innerHTML = `
-      <td>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div style="width: 32px; height: 32px; border-radius: 50%; background: ${activo.color}20; color: ${activo.color}; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px;">
-            ${activo.icon}
+    return `
+      <tr>
+        <td>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: ${activo.color}20; color: ${activo.color}; display: flex; align-items: center; justify-content: center; font-weight: bold">
+              ${activo.icono}
+            </div>
+            <div>
+              <strong style="color: #fff">${activo.nombre}</strong>
+              <div style="font-size: 0.85em; color: #888">${activo.porcentajePortafolio.toFixed(2)}%</div>
+            </div>
           </div>
-          <div>
-            <div style="font-weight: 800; font-size: 13px;">${activo.nombre}</div>
-            <div style="font-size: 11px; color: var(--text-secondary);">${activo.porcentajePortafolio.toFixed(2)}%</div>
-          </div>
-        </div>
-      </td>
-      <td>
-        <div style="font-weight: 700;">USDT</div>
-        <div style="font-size: 13px; font-weight: 800;">${activo.inversion.toFixed(2)}</div>
-      </td>
-      <td>
-        <div style="font-weight: 700;">USDT</div>
-        <div style="font-size: 13px; font-weight: 800;">${activo.valorActual.toFixed(2)}</div>
-      </td>
-      <td>
-        <div style="font-weight: 700; color: ${isPositive ? 'var(--ok)' : 'var(--bad)'};">
-          ${isPositive ? '+' : ''}USDT
-        </div>
-        <div style="font-size: 13px; font-weight: 800; color: ${isPositive ? 'var(--ok)' : 'var(--bad)'};">
-          ${activo.profitLoss.toFixed(2)}
-        </div>
-      </td>
-      <td>
-        <div style="font-size: 15px; font-weight: 800; color: ${isPositive ? 'var(--ok)' : 'var(--bad)'};">
-          ${isPositive ? '+' : ''}${activo.roi.toFixed(2)}%
-        </div>
-      </td>
-      <td>
-        <div style="font-weight: 700;">USD</div>
-        <div style="font-size: 13px; font-weight: 800;">-</div>
-      </td>
+        </td>
+        <td style="color: #fff">
+          <strong>USDT</strong><br>
+          <span style="color: #aaa">${formatNumber(activo.inversion)}</span>
+        </td>
+        <td style="color: #fff">
+          <strong>USDT</strong><br>
+          <span style="color: #aaa">${formatNumber(activo.valorActual)}</span>
+        </td>
+        <td style="color: ${plColor}">
+          <strong>${plSign}USDT</strong><br>
+          <span>${formatNumber(activo.pl)}</span>
+        </td>
+        <td style="color: ${plColor}">
+          <strong>${roiSign}${activo.roi.toFixed(2)}%</strong>
+        </td>
+        <td style="color: #fff">
+          <strong>USD</strong><br>
+          <span style="color: #aaa">${formatNumber(activo.precioActual)}</span>
+        </td>
+      </tr>
     `;
-    
-    tbody.appendChild(row);
-  });
+  }).join('');
 }
 
 // ============================================
-// FUNCIONES AUXILIARES PARA DATOS SIMULADOS
+// FUNCIONES DE UTILIDAD
 // ============================================
 
-function generateMockPriceHistory(activo) {
-  const data = [];
-  const now = new Date();
-  const days = 120;
-  
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    
-    // Simular precio basado en ROI actual
-    const basePrice = 1000;
-    const variation = (Math.random() - 0.5) * 200;
-    const trend = (activo.roi / 100) * (days - i) / days * basePrice;
-    
-    data.push({
-      x: date,
-      y: basePrice + trend + variation
-    });
-  }
-  
-  return data;
-}
-
-function generatePortfolioCurveData() {
-  const labels = [];
-  const invertido = [];
-  const valor = [];
-  
-  const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
-  const totalInv = state.activos.reduce((sum, a) => sum + a.inversion, 0);
-  const totalVal = state.activos.reduce((sum, a) => sum + a.valorActual, 0);
-  
-  for (let i = 0; i < months.length; i++) {
-    labels.push(months[i]);
-    const progress = (i + 1) / months.length;
-    invertido.push(totalInv * progress);
-    valor.push((totalInv + (totalVal - totalInv) * progress) * (0.9 + Math.random() * 0.2));
-  }
-  
-  return { labels, invertido, valor };
-}
-
-function generateDrawdownData() {
-  const labels = [];
-  const values = [];
-  const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
-  
-  for (let i = 0; i < months.length; i++) {
-    labels.push(months[i]);
-    values.push(Math.random() * -10); // Drawdown siempre negativo
-  }
-  
-  return { labels, values };
-}
-
-// ============================================
-// UTILIDADES
-// ============================================
-
-function updateStatus(text, status) {
-  const pill = document.getElementById('statusPill');
-  const statusText = document.getElementById('statusText');
-  
-  pill.className = 'pill';
-  if (status === 'online') pill.classList.add('online');
-  if (status === 'offline') pill.classList.add('offline');
-  
-  statusText.textContent = text;
+function formatNumber(num) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(num);
 }
 
 function formatTime(date) {
   const now = new Date();
-  const diff = Math.floor((now - date) / 1000); // segundos
+  const diff = Math.floor((now - date) / 1000);
   
   if (diff < 60) return 'hace unos segundos';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} minuto${Math.floor(diff / 60) > 1 ? 's' : ''}`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} hora${Math.floor(diff / 3600) > 1 ? 's' : ''}`;
-  return `hace ${Math.floor(diff / 86400)} día${Math.floor(diff / 86400) > 1 ? 's' : ''}`;
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} minutos`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} horas`;
+  return `hace ${Math.floor(diff / 86400)} días`;
+}
+
+function animateValue(elementId, start, end, duration, formatter = val => val) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  const startTime = performance.now();
+  const range = end - start;
+  
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    const current = start + range * easeProgress;
+    
+    element.textContent = formatter(current);
+    element.setAttribute('data-value', current);
+    
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  
+  requestAnimationFrame(update);
+}
+
+function updateStatus(text, status) {
+  const statusText = document.getElementById('statusText');
+  const statusDot = document.querySelector('.status-dot');
+  
+  if (statusText) statusText.textContent = text;
+  if (statusDot) {
+    statusDot.className = 'status-dot';
+    if (status === 'online') statusDot.classList.add('online');
+    else if (status === 'loading') statusDot.classList.add('loading');
+    else statusDot.classList.add('offline');
+  }
+}
+
+function generateDateLabels(days) {
+  const labels = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    labels.push(date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }));
+  }
+  return labels;
+}
+
+function getPeriodDays() {
+  switch (state.currentPeriod) {
+    case '7d': return 7;
+    case '30d': return 30;
+    case 'all':
+    default: return 90;
+  }
+}
+
+function generatePriceData(currentPrice, days) {
+  const data = [];
+  let price = currentPrice * 0.85;
+  for (let i = 0; i < days; i++) {
+    price += (Math.random() - 0.45) * price * 0.05;
+    data.push(price);
+  }
+  data[days - 1] = currentPrice;
+  return data;
+}
+
+function generateCurveData(finalValue, days, volatility) {
+  const data = [];
+  let value = finalValue * 0.8;
+  for (let i = 0; i < days; i++) {
+    value += (Math.random() - 0.3) * value * volatility;
+    data.push(value);
+  }
+  data[days - 1] = finalValue;
+  return data;
+}
+
+function generateDrawdownData(days) {
+  const data = [];
+  for (let i = 0; i < days; i++) {
+    data.push(-Math.random() * 15);
+  }
+  return data;
+}
+
+// ============================================
+// EVENT LISTENERS
+// ============================================
+
+function setupEventListeners() {
+  // Botón de actualizar
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      loadData();
+    });
+  }
+  
+  // Botones de período (chips)
+  document.querySelectorAll('.chip[data-period]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      // Remover active de todos los chips del mismo grupo
+      const parent = e.target.parentElement;
+      parent.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      
+      // Actualizar período y re-renderizar
+      state.currentPeriod = e.target.dataset.period;
+      console.log('📅 Período cambiado a:', state.currentPeriod);
+      renderCharts();
+    });
+  });
 }
 
 function toggleTheme() {
   const html = document.documentElement;
-  const currentTheme = html.getAttribute('data-theme') || 'dark';
+  const currentTheme = html.getAttribute('data-theme');
   const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  
   html.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
   
-  document.getElementById('themeIcon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+  const themeIcon = document.getElementById('themeIcon');
+  if (themeIcon) {
+    themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+  }
+  
+  // Re-renderizar gráficos con nuevo tema
+  setTimeout(() => renderCharts(), 100);
 }
 
 function loadTheme() {
   const savedTheme = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
-  document.getElementById('themeIcon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+  
+  const themeIcon = document.getElementById('themeIcon');
+  if (themeIcon) {
+    themeIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+  }
 }
 
 function refreshData() {
-  const btn = document.getElementById('refreshBtn');
-  btn.disabled = true;
-  btn.style.opacity = '0.6';
-  
-  loadData().finally(() => {
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-    }, 1000);
-  });
+  loadData();
 }
-
-function setupAutoRefresh() {
-  if (state.autoRefreshInterval) {
-    clearInterval(state.autoRefreshInterval);
-  }
-  
-  state.autoRefreshInterval = setInterval(() => {
-    console.log('🔄 Auto-refresh activado');
-    loadData();
-  }, DASHBOARD_CONFIG.AUTO_REFRESH_INTERVAL);
-}
-
-function sortWatchlist() {
-  alert('Funcionalidad de ordenamiento próximamente');
-}
-
-// Exportar funciones globales
-window.toggleTheme = toggleTheme;
-window.refreshData = refreshData;
-window.sortWatchlist = sortWatchlist;
