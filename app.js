@@ -92,10 +92,23 @@ function parseGoogleDate(dateValue) {
     }
   }
   
-  // Si es un string de fecha normal
-  if (typeof dateValue === 'string') {
+  // Si es un string de fecha ISO o normal
+  if (typeof dateValue === 'string' && dateValue !== '-' && dateValue !== '--') {
+    // Intentar parsear como fecha
     const date = new Date(dateValue);
     if (!isNaN(date.getTime())) return date;
+    
+    // Intentar formato YYYY-MM-DD HH:MM:SS
+    const match = dateValue.match(/(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}):(\d{2}))?/);
+    if (match) {
+      const year = parseInt(match[1]);
+      const month = parseInt(match[2]) - 1; // Mes en base 0
+      const day = parseInt(match[3]);
+      const hour = parseInt(match[4] || 0);
+      const minute = parseInt(match[5] || 0);
+      const second = parseInt(match[6] || 0);
+      return new Date(year, month, day, hour, minute, second);
+    }
   }
   
   // Si es un timestamp
