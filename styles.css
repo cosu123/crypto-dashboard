@@ -23,8 +23,8 @@
   --bg2: #0a0f1a;
   
   --text: rgba(255,255,255,.95);
-  --text-secondary: rgba(255,255,255,.7);
-  --text-muted: rgba(255,255,255,.5);
+  --text-secondary: rgba(255,255,255,.80);
+  --text-muted: rgba(255,255,255,.65);
   
   --border: rgba(255,255,255,.12);
   --border2: rgba(255,255,255,.08);
@@ -47,7 +47,7 @@
   
   /* Chart Colors */
   --grid: rgba(255,255,255,.08);
-  --tick: rgba(255,255,255,.65);
+  --tick: rgba(255,255,255,.75);
 }
 
 html[data-theme="light"] {

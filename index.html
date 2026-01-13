@@ -53,10 +53,10 @@
           <span class="status-dot"></span>
           <span id="statusText">Cargando...</span>
         </div>
-        <button class="btn btn-icon" onclick="toggleTheme()" title="Cambiar tema">
+        <button class="btn btn-icon" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">
           <span id="themeIcon">☀️</span>
         </button>
-        <button class="btn btn-primary" onclick="refreshData()" id="refreshBtn">
+        <button class="btn btn-primary" onclick="refreshData()" id="refreshBtn" aria-label="Actualizar datos del portafolio">
           <span class="btn-icon">↻</span>
           <span>Actualizar</span>
         </button>
@@ -175,10 +175,10 @@
               <h3>📊 EVOLUCIÓN DE PRECIOS</h3>
               <p class="card-subtitle">Historial de precios de tus activos principales</p>
             </div>
-            <div class="chart-controls">
-              <button class="chip active" data-period="all">Todo</button>
-              <button class="chip" data-period="30d">30D</button>
-              <button class="chip" data-period="7d">7D</button>
+            <div class="chart-controls" role="group" aria-label="Selección de período">
+              <button class="chip active" data-period="all" aria-label="Ver todos los datos">Todo</button>
+              <button class="chip" data-period="30d" aria-label="Ver últimos 30 días">30D</button>
+              <button class="chip" data-period="7d" aria-label="Ver últimos 7 días">7D</button>
             </div>
           </div>
           <div class="canvasWrap">
@@ -245,7 +245,7 @@
               <h3>🔥 WATCHLIST</h3>
               <p class="card-subtitle">Ordenado por % del portafolio. Toca un activo para ver detalles rápido</p>
             </div>
-            <button class="chip" onclick="sortWatchlist()">
+            <button class="chip" onclick="sortWatchlist()" aria-label="Abrir watchlist de activos">
               <span>🔄 Tap para abrir</span>
             </button>
           </div>

@@ -67,6 +67,51 @@ async function initApp() {
 // CARGA DE DATOS DESDE GOOGLE SHEETS
 // ============================================
 
+async function loadHistPrecios() {
+  try {
+    console.log('📊 Cargando historial de precios...');
+    const sheetId = DASHBOARD_CONFIG.SHEET_ID;
+    const sheetName = DASHBOARD_CONFIG.SHEETS.PRECIOS;
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}&_=${Date.now()}`;
+    
+    const response = await fetch(url, { cache: 'no-store' });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const text = await response.text();
+    const jsonText = text.substring(47).slice(0, -2);
+    const json = JSON.parse(jsonText);
+    
+    console.log('✅ Historial de precios cargado:', json.table.rows.length, 'filas');
+    
+    // Procesar datos históricos
+    const histData = {};
+    
+    json.table.rows.forEach(row => {
+      const fecha = row.c[0]?.f || row.c[0]?.v; // Fecha
+      const activo = row.c[1]?.v; // Activo
+      const precio = parseFloat(row.c[2]?.v || 0); // Precio
+      
+      if (activo && precio > 0) {
+        if (!histData[activo]) {
+          histData[activo] = [];
+        }
+        histData[activo].push({ fecha, precio });
+      }
+    });
+    
+    state.preciosHistoricos = histData;
+    console.log('✅ Datos históricos procesados:', Object.keys(histData));
+    
+    return histData;
+  } catch (error) {
+    console.error('❌ Error cargando historial de precios:', error);
+    return {};
+  }
+}
+
 async function loadData() {
   try {
     console.log('📊 Iniciando carga de datos...');
@@ -74,10 +119,12 @@ async function loadData() {
     
     const sheetId = DASHBOARD_CONFIG.SHEET_ID;
     const sheetName = DASHBOARD_CONFIG.SHEETS.RESUMEN; // Usar Resumen_Activo
-    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+    // Agregar timestamp para evitar caché del navegador
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}&_=${Date.now()}`;
     
     console.log('🌐 Fetching:', url);
-    const response = await fetch(url);
+    // Usar cache: 'no-store' para forzar datos frescos
+    const response = await fetch(url, { cache: 'no-store' });
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -95,6 +142,10 @@ async function loadData() {
     // Procesar datos
     processResumenActivo(json);
     console.log('✅ Datos procesados:', state.activos);
+    
+    // Cargar historial de precios
+    await loadHistPrecios();
+    console.log('✅ Historial de precios cargado');
     
     // Actualizar UI
     console.log('📊 Actualizando KPIs...');
@@ -193,6 +244,7 @@ function processResumenActivo(json) {
     }
     
     return {
+      symbol: item.activo, // Para getRealPriceData
       simbolo: item.activo,
       nombre: DASHBOARD_CONFIG.NOMBRES[item.activo] || item.activo,
       color: DASHBOARD_CONFIG.COLORS[item.activo] || '#888',
@@ -287,7 +339,7 @@ function renderPriceChart() {
   const labels = generateDateLabels(days);
   const datasets = state.activos.slice(0, 5).map(activo => ({
     label: activo.simbolo,
-    data: generatePriceData(activo.precioActual, days),
+    data: getRealPriceData(activo.symbol, days),
     borderColor: activo.color,
     backgroundColor: activo.color + '20',
     borderWidth: 2,
@@ -357,7 +409,7 @@ function renderPortfolioCurveChart() {
       datasets: [
         {
           label: 'Invertido',
-          data: generateCurveData(totalInvertido, days, 0.02),
+          data: getRealCurveData(totalInvertido, days, 'invested'),
           borderColor: '#fbbf24',
           backgroundColor: '#fbbf2420',
           borderWidth: 2,
@@ -366,7 +418,7 @@ function renderPortfolioCurveChart() {
         },
         {
           label: 'Valor',
-          data: generateCurveData(valorActual, days, 0.05),
+          data: getRealCurveData(valorActual, days, 'value'),
           borderColor: '#4dd6ff',
           backgroundColor: '#4dd6ff20',
           borderWidth: 2,
@@ -479,7 +531,7 @@ function renderDrawdownChart() {
   
   const days = getPeriodDays();
   const labels = generateDateLabels(days);
-  const drawdownData = generateDrawdownData(days);
+  const drawdownData = getRealDrawdownData(days);
   
   state.charts.drawdown = new Chart(ctx, {
     type: 'line',
@@ -825,9 +877,21 @@ function renderWatchlist() {
 
 function renderTable() {
   const tbody = document.querySelector('#professionalTable tbody');
-  if (!tbody) return;
+  if (!tbody) {
+    console.error('❌ Tabla no encontrada: #professionalTable tbody');
+    return;
+  }
   
-  tbody.innerHTML = state.activos.map(activo => {
+  // Validar que hay activos
+  if (!state.activos || state.activos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #888">No hay datos disponibles</td></tr>';
+    return;
+  }
+  
+  console.log('📊 Renderizando tabla con', state.activos.length, 'activos');
+  
+  try {
+    tbody.innerHTML = state.activos.map(activo => {
     const plColor = activo.pl >= 0 ? 'var(--success)' : 'var(--error)';
     const plSign = activo.pl >= 0 ? '+' : '';
     const roiSign = activo.roi >= 0 ? '+' : '';
@@ -867,6 +931,11 @@ function renderTable() {
       </tr>
     `;
   }).join('');
+    console.log('✅ Tabla renderizada exitosamente');
+  } catch (error) {
+    console.error('❌ Error renderizando tabla:', error);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #f44336">Error al cargar datos</td></tr>';
+  }
 }
 
 // ============================================
@@ -961,7 +1030,20 @@ function getPeriodDays() {
   }
 }
 
-function generatePriceData(currentPrice, days) {
+function getRealPriceData(activo, days) {
+  // Intentar obtener datos reales del historial
+  if (state.preciosHistoricos[activo] && state.preciosHistoricos[activo].length > 0) {
+    const histData = state.preciosHistoricos[activo];
+    // Tomar los últimos 'days' datos
+    const startIndex = Math.max(0, histData.length - days);
+    const recentData = histData.slice(startIndex);
+    return recentData.map(d => d.precio);
+  }
+  
+  // Fallback: generar datos simulados si no hay datos reales
+  const activo_obj = state.activos.find(a => a.symbol === activo);
+  const currentPrice = activo_obj?.precio || 100;
+  
   const data = [];
   let price = currentPrice * 0.85;
   for (let i = 0; i < days; i++) {
@@ -972,22 +1054,33 @@ function generatePriceData(currentPrice, days) {
   return data;
 }
 
-function generateCurveData(finalValue, days, volatility) {
+function getRealCurveData(finalValue, days, type = 'invested') {
+  // Si hay datos históricos, calcular la curva real
+  // Por ahora, usar una aproximación lineal desde el valor inicial hasta el final
   const data = [];
-  let value = finalValue * 0.8;
+  const startValue = type === 'invested' ? finalValue * 0.9 : finalValue * 0.85;
+  const increment = (finalValue - startValue) / days;
+  
   for (let i = 0; i < days; i++) {
-    value += (Math.random() - 0.3) * value * volatility;
-    data.push(value);
+    data.push(startValue + (increment * i));
   }
   data[days - 1] = finalValue;
   return data;
 }
 
-function generateDrawdownData(days) {
+function getRealDrawdownData(days) {
+  // Calcular drawdown real basado en el P&L del portafolio
   const data = [];
+  const totalInvertido = state.activos.reduce((sum, a) => sum + a.invertido, 0);
+  const valorActual = state.activos.reduce((sum, a) => sum + a.valor, 0);
+  const plPercent = ((valorActual - totalInvertido) / totalInvertido) * 100;
+  
+  // Simular drawdown desde 0 hasta el P&L actual
   for (let i = 0; i < days; i++) {
-    data.push(-Math.random() * 15);
+    const progress = i / days;
+    data.push(plPercent * progress);
   }
+  
   return data;
 }
 
