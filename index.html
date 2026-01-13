@@ -131,6 +131,39 @@
       </div>
     </div>
 
+    <!-- Gráfico de Objetivo -->
+    <div class="card card-goal" style="margin: 1.5rem 0;">
+      <div class="cardHeader">
+        <div>
+          <h3>🎯 OBJETIVO DE INVERSIÓN</h3>
+          <p class="card-subtitle">Progreso hacia tu meta de $5,000 USDT</p>
+        </div>
+      </div>
+      <div style="padding: 2rem;">
+        <div class="goal-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+          <div style="text-align: center;">
+            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Inversión Actual</div>
+            <div style="font-size: 2rem; font-weight: bold; color: #fff;" id="goalCurrent">$0</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Objetivo</div>
+            <div style="font-size: 2rem; font-weight: bold; color: #00d4ff;">$5,000</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Falta</div>
+            <div style="font-size: 2rem; font-weight: bold; color: #ff6b9d;" id="goalRemaining">$0</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Progreso</div>
+            <div style="font-size: 2rem; font-weight: bold; color: #00ff88;" id="goalProgress">0%</div>
+          </div>
+        </div>
+        <div class="canvasWrap" style="height: 120px;">
+          <canvas id="goalChart"></canvas>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Grid -->
     <div class="main-grid">
       <!-- Left Column -->
