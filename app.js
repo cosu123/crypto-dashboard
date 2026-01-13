@@ -74,6 +74,47 @@ function updateStatus(status) {
   }
 }
 
+// Convertir fecha de Google Sheets a Date
+function parseGoogleDate(dateValue) {
+  if (!dateValue) return null;
+  
+  // Si es un objeto Date de Google Sheets: Date(2024,9,23,19,7,57)
+  if (typeof dateValue === 'string' && dateValue.startsWith('Date(')) {
+    const match = dateValue.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)/);
+    if (match) {
+      const year = parseInt(match[1]);
+      const month = parseInt(match[2]); // Ya está en base 0
+      const day = parseInt(match[3]);
+      const hour = parseInt(match[4] || 0);
+      const minute = parseInt(match[5] || 0);
+      const second = parseInt(match[6] || 0);
+      return new Date(year, month, day, hour, minute, second);
+    }
+  }
+  
+  // Si es un string de fecha normal
+  if (typeof dateValue === 'string') {
+    const date = new Date(dateValue);
+    if (!isNaN(date.getTime())) return date;
+  }
+  
+  // Si es un timestamp
+  if (typeof dateValue === 'number') {
+    return new Date(dateValue);
+  }
+  
+  return null;
+}
+
+// Obtener valor numérico seguro
+function getNumericValue(value) {
+  if (value === null || value === undefined || value === '' || value === '-' || value === '--') {
+    return 0;
+  }
+  const num = parseFloat(value);
+  return isNaN(num) ? 0 : num;
+}
+
 // Refrescar datos desde Google Sheets
 async function refreshData() {
   try {
@@ -89,8 +130,18 @@ async function refreshData() {
       appData.precios = preciosData || [];
       appData.lastUpdate = new Date();
 
+      console.log('✓ Datos cargados:', {
+        portafolio: appData.portafolio.length,
+        precios: appData.precios.length,
+        primeraFila: appData.portafolio[0]
+      });
+
       // Guardar en localStorage para modo offline
-      localStorage.setItem('cachedData', JSON.stringify(appData));
+      localStorage.setItem('cachedData', JSON.stringify({
+        portafolio: appData.portafolio,
+        precios: appData.precios,
+        lastUpdate: appData.lastUpdate.toISOString()
+      }));
 
       // Actualizar UI
       updateKPIs();
@@ -99,7 +150,6 @@ async function refreshData() {
       updateLastUpdateTime();
 
       updateStatus('online');
-      console.log('✓ Datos cargados:', appData.portafolio.length, 'transacciones');
     } else {
       throw new Error('No se pudieron cargar los datos');
     }
@@ -110,7 +160,10 @@ async function refreshData() {
     const cached = localStorage.getItem('cachedData');
     if (cached) {
       const cachedData = JSON.parse(cached);
-      appData = cachedData;
+      appData.portafolio = cachedData.portafolio;
+      appData.precios = cachedData.precios;
+      appData.lastUpdate = new Date(cachedData.lastUpdate);
+      
       updateKPIs();
       updateCharts();
       updateTable();
@@ -146,9 +199,21 @@ async function fetchSheetData(sheetName) {
     const rows = data.table.rows.map(row => {
       const obj = {};
       row.c.forEach((cell, idx) => {
-        obj[headers[idx]] = cell ? (cell.v !== null ? cell.v : cell.f) : null;
+        const header = headers[idx];
+        if (cell === null) {
+          obj[header] = null;
+        } else {
+          // Usar el valor 'v' (value) en lugar de 'f' (formatted)
+          obj[header] = cell.v !== null && cell.v !== undefined ? cell.v : cell.f;
+        }
       });
       return obj;
+    });
+
+    console.log(`✓ Hoja "${sheetName}" cargada:`, {
+      filas: rows.length,
+      columnas: headers.length,
+      headers: headers.slice(0, 10)
     });
 
     return rows;
@@ -162,28 +227,65 @@ async function fetchSheetData(sheetName) {
 function updateKPIs() {
   const data = appData.portafolio;
   
-  if (!data || data.length === 0) return;
+  if (!data || data.length === 0) {
+    console.warn('No hay datos para calcular KPIs');
+    return;
+  }
 
   // Calcular métricas
   let totalInvertido = 0;
   let totalActual = 0;
   const activos = new Set();
   const exchanges = new Set();
+  let transaccionesValidas = 0;
 
-  data.forEach(row => {
-    const inversion = parseFloat(row['Inversión USDT'] || row['Inversion USDT'] || 0);
-    const valorActual = parseFloat(row['Valor Actual'] || row['Valor Actual USDT'] || 0);
+  data.forEach((row, idx) => {
+    // Usar los nombres exactos de las columnas del Google Sheet
+    const inversion = getNumericValue(row['Inversión USDT']);
+    const valorActual = getNumericValue(row['Valor Actual']);
     const activo = row['Activo'];
-    const exchange = row['Exchange/Plataforma'] || row['Exchange'];
+    const exchange = row['Exchange/Plataforma'];
 
-    if (!isNaN(inversion)) totalInvertido += inversion;
-    if (!isNaN(valorActual)) totalActual += valorActual;
-    if (activo) activos.add(activo);
-    if (exchange) exchanges.add(exchange);
+    if (inversion > 0) {
+      totalInvertido += inversion;
+      transaccionesValidas++;
+    }
+    
+    if (valorActual > 0) {
+      totalActual += valorActual;
+    }
+    
+    if (activo && activo !== '' && activo !== '-') {
+      activos.add(activo);
+    }
+    
+    if (exchange && exchange !== '' && exchange !== '-') {
+      exchanges.add(exchange);
+    }
+
+    // Log de las primeras 3 filas para debugging
+    if (idx < 3) {
+      console.log(`Fila ${idx}:`, {
+        activo,
+        inversion,
+        valorActual,
+        exchange
+      });
+    }
   });
 
   const pl = totalActual - totalInvertido;
   const plPercent = totalInvertido > 0 ? (pl / totalInvertido * 100) : 0;
+
+  console.log('📊 KPIs calculados:', {
+    totalInvertido,
+    totalActual,
+    pl,
+    plPercent,
+    activos: activos.size,
+    transacciones: transaccionesValidas,
+    exchanges: exchanges.size
+  });
 
   // Actualizar UI
   document.getElementById('kpiInvertido').textContent = formatCurrency(totalInvertido);
@@ -193,7 +295,7 @@ function updateKPIs() {
   document.getElementById('kpiPLPercent').textContent = formatPercent(plPercent);
   document.getElementById('kpiPLPercent').style.color = pl >= 0 ? 'var(--ok)' : 'var(--bad)';
   document.getElementById('kpiActivos').textContent = activos.size;
-  document.getElementById('kpiTransacciones').textContent = data.length;
+  document.getElementById('kpiTransacciones').textContent = transaccionesValidas;
   document.getElementById('kpiExchanges').textContent = exchanges.size;
 }
 
@@ -215,23 +317,31 @@ function updatePriceChart() {
 
   const preciosData = appData.precios;
   
+  if (!preciosData || preciosData.length === 0) {
+    console.warn('No hay datos de precios para el gráfico');
+    return;
+  }
+
   // Agrupar por activo
   const activosMap = {};
   preciosData.forEach(row => {
     const activo = row['Activo'];
-    const fecha = row['FechaISO'] || row['Fecha'];
-    const precio = parseFloat(row['Precio']);
+    const fecha = parseGoogleDate(row['FechaISO'] || row['Fecha']);
+    const precio = getNumericValue(row['Precio']);
 
-    if (!activo || !fecha || isNaN(precio)) return;
+    if (!activo || !fecha || precio === 0) return;
 
     if (!activosMap[activo]) {
-      activosMap[activo] = { labels: [], data: [] };
+      activosMap[activo] = [];
     }
-    activosMap[activo].labels.push(new Date(fecha));
-    activosMap[activo].data.push(precio);
+    activosMap[activo].push({ fecha, precio });
   });
 
-  // Tomar los 5 activos principales
+  // Ordenar por fecha y tomar los 5 activos principales
+  Object.keys(activosMap).forEach(activo => {
+    activosMap[activo].sort((a, b) => a.fecha - b.fecha);
+  });
+
   const topActivos = Object.keys(activosMap).slice(0, 5);
   const colors = {
     'BTC': '#f7931a',
@@ -241,27 +351,32 @@ function updatePriceChart() {
     'AVAX': '#e84142'
   };
 
-  const datasets = topActivos.map(activo => ({
-    label: activo,
-    data: activosMap[activo].data,
-    borderColor: colors[activo] || '#4dd6ff',
-    backgroundColor: (colors[activo] || '#4dd6ff') + '20',
-    borderWidth: 2,
-    tension: 0.4,
-    fill: false
-  }));
-
-  // Usar las fechas del primer activo como labels
-  const labels = topActivos.length > 0 
-    ? activosMap[topActivos[0]].labels.map(d => d.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }))
-    : [];
+  // Crear datasets
+  const datasets = topActivos.map(activo => {
+    const data = activosMap[activo];
+    return {
+      label: activo,
+      data: data.map(d => ({ x: d.fecha, y: d.precio })),
+      borderColor: colors[activo] || '#4dd6ff',
+      backgroundColor: (colors[activo] || '#4dd6ff') + '20',
+      borderWidth: 2,
+      tension: 0.4,
+      fill: false,
+      pointRadius: 0,
+      pointHoverRadius: 4
+    };
+  });
 
   appData.charts.priceChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
       plugins: {
         legend: {
           display: true,
@@ -278,6 +393,13 @@ function updatePriceChart() {
       },
       scales: {
         x: {
+          type: 'time',
+          time: {
+            unit: 'day',
+            displayFormats: {
+              day: 'MMM d'
+            }
+          },
           grid: { color: 'var(--grid)' },
           ticks: { color: 'var(--tick)', font: { size: 10 } }
         },
@@ -310,9 +432,9 @@ function updatePortfolioChart() {
   const activosMap = {};
   data.forEach(row => {
     const activo = row['Activo'];
-    const valorActual = parseFloat(row['Valor Actual'] || row['Valor Actual USDT'] || 0);
+    const valorActual = getNumericValue(row['Valor Actual']);
 
-    if (!activo || isNaN(valorActual)) return;
+    if (!activo || activo === '' || activo === '-' || valorActual === 0) return;
 
     if (!activosMap[activo]) {
       activosMap[activo] = 0;
@@ -322,6 +444,12 @@ function updatePortfolioChart() {
 
   const labels = Object.keys(activosMap);
   const valores = Object.values(activosMap);
+  
+  if (labels.length === 0) {
+    console.warn('No hay datos para el gráfico de distribución');
+    return;
+  }
+
   const colors = {
     'BTC': '#f7931a',
     'ETH': '#627eea',
@@ -348,7 +476,7 @@ function updatePortfolioChart() {
         legend: {
           display: true,
           position: 'right',
-          labels: { color: 'var(--text)', font: { size: 11 } }
+          labels: { color: 'var(--text)', font: { size: 11 }, padding: 10 }
         },
         tooltip: {
           backgroundColor: 'var(--tt-bg)',
@@ -361,7 +489,7 @@ function updatePortfolioChart() {
               const label = context.label || '';
               const value = context.parsed || 0;
               const total = context.dataset.data.reduce((a, b) => a + b, 0);
-              const percent = ((value / total) * 100).toFixed(1);
+              const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
               return `${label}: $${value.toLocaleString()} (${percent}%)`;
             }
           }
@@ -376,29 +504,39 @@ function updateTable() {
   const tbody = document.getElementById('transactionsBody');
   if (!tbody) return;
 
-  const data = appData.portafolio.slice(0, 20); // Últimas 20 transacciones
+  const data = appData.portafolio.filter(row => {
+    const inversion = getNumericValue(row['Inversión USDT']);
+    return inversion > 0; // Solo mostrar transacciones con inversión
+  }).slice(0, 20); // Últimas 20 transacciones
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted)">No hay datos disponibles</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:40px">No hay datos disponibles</td></tr>';
     return;
   }
 
   tbody.innerHTML = data.map(row => {
-    const fecha = row['Fecha'] ? new Date(row['Fecha']).toLocaleDateString('es-ES') : '--';
+    const fechaRaw = row['Fecha'];
+    const fecha = parseGoogleDate(fechaRaw);
+    const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    }) : '--';
+    
     const activo = row['Activo'] || '--';
     const tipo = row['Tipo'] || '--';
-    const inversion = formatCurrency(parseFloat(row['Inversión USDT'] || row['Inversion USDT'] || 0));
-    const cantidad = parseFloat(row['Cantidad/Moneda Crypto'] || row['Cantidad'] || 0).toFixed(6);
-    const precio = formatCurrency(parseFloat(row['Precio Compra'] || row['Precio'] || 0));
+    const inversion = getNumericValue(row['Inversión USDT']);
+    const cantidad = getNumericValue(row['Cantidad/Moneda Crypto']);
+    const precio = getNumericValue(row['Precio Compra']);
 
     return `
       <tr>
-        <td>${fecha}</td>
-        <td><strong>${activo}</strong></td>
+        <td>${fechaStr}</td>
+        <td><strong style="color: var(--accent2)">${activo}</strong></td>
         <td>${tipo}</td>
-        <td>${inversion}</td>
-        <td>${cantidad}</td>
-        <td>${precio}</td>
+        <td>${formatCurrency(inversion)}</td>
+        <td>${cantidad.toFixed(6)}</td>
+        <td>${formatCurrency(precio)}</td>
       </tr>
     `;
   }).join('');
@@ -453,7 +591,7 @@ function updateThemeIcon() {
 
 // Formatear moneda
 function formatCurrency(value) {
-  if (isNaN(value)) return '$0.00';
+  if (isNaN(value) || value === null) return '$0.00';
   return '$' + value.toLocaleString('en-US', { 
     minimumFractionDigits: 2, 
     maximumFractionDigits: 2 
@@ -462,7 +600,7 @@ function formatCurrency(value) {
 
 // Formatear porcentaje
 function formatPercent(value) {
-  if (isNaN(value)) return '0%';
+  if (isNaN(value) || value === null) return '0%';
   return (value >= 0 ? '+' : '') + value.toFixed(2) + '%';
 }
 
