@@ -1,4 +1,4 @@
-# 🚀 Heidi Crypto Portfolio Dashboard
+# 🚀 Crypto Portfolio Dashboard
 
 Dashboard profesional de portafolio cripto con sincronización en tiempo real con Google Sheets. Diseñado con una interfaz futurista y funcionalidad completa tanto online como offline.
 
