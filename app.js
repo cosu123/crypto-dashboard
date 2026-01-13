@@ -22,28 +22,45 @@ if (document.readyState === 'loading') {
 console.log('🚀 Script cargado - HEIDI Crypto Portfolio');
 
 async function initApp() {
-  // Cargar tema guardado
-  loadTheme();
+  console.log('🚀 Iniciando aplicación...');
   
-  // Configurar event listeners
-  setupEventListeners();
-  
-  // Cargar datos
-  await loadData();
-  
-  // Ocultar loading screen
-  setTimeout(() => {
+  try {
+    // Cargar tema guardado
+    loadTheme();
+    console.log('✅ Tema cargado');
+    
+    // Configurar event listeners
+    setupEventListeners();
+    console.log('✅ Event listeners configurados');
+    
+    // Cargar datos
+    await loadData();
+    console.log('✅ Datos cargados');
+    
+    // Ocultar loading screen
+    setTimeout(() => {
+      const loadingScreen = document.getElementById('loadingScreen');
+      if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => {
+          loadingScreen.style.display = 'none';
+          console.log('✅ Loading screen ocultado');
+        }, 500);
+      }
+    }, 500);
+    
+    // Configurar auto-refresh
+    state.autoRefreshInterval = setInterval(loadData, DASHBOARD_CONFIG.AUTO_REFRESH_INTERVAL);
+    console.log('✅ Auto-refresh configurado');
+    
+  } catch (error) {
+    console.error('❌ Error en initApp:', error);
+    // Ocultar loading screen incluso si hay error
     const loadingScreen = document.getElementById('loadingScreen');
     if (loadingScreen) {
-      loadingScreen.style.opacity = '0';
-      setTimeout(() => {
-        loadingScreen.style.display = 'none';
-      }, 500);
+      loadingScreen.style.display = 'none';
     }
-  }, 1000);
-  
-  // Configurar auto-refresh
-  state.autoRefreshInterval = setInterval(loadData, DASHBOARD_CONFIG.AUTO_REFRESH_INTERVAL);
+  }
 }
 
 // ============================================
