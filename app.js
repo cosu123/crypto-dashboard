@@ -400,19 +400,41 @@ function updateGoalChart() {
   const falta = Math.max(0, objetivo - actual);
   const progreso = Math.min(100, (actual / objetivo) * 100);
   
-  // Actualizar valores
+  console.log(`🎯 Actualizando gráfico de objetivo: Actual=${actual}, Falta=${falta}, Progreso=${progreso}%`);
+  
+  // Actualizar valores con verificación de existencia
   const actualEl = document.getElementById('goalActual');
-  if (actualEl) actualEl.textContent = `$${actual.toFixed(2)}`;
+  if (actualEl) {
+    actualEl.textContent = `$${actual.toFixed(2)}`;
+    console.log('✅ goalActual actualizado');
+  } else {
+    console.warn('⚠️ Elemento goalActual no encontrado');
+  }
   
   const faltaEl = document.getElementById('goalFalta');
-  if (faltaEl) faltaEl.textContent = `$${falta.toFixed(2)}`;
+  if (faltaEl) {
+    faltaEl.textContent = `$${falta.toFixed(2)}`;
+    console.log('✅ goalFalta actualizado');
+  } else {
+    console.warn('⚠️ Elemento goalFalta no encontrado');
+  }
   
   const progresoEl = document.getElementById('goalProgreso');
-  if (progresoEl) progresoEl.textContent = `${progreso.toFixed(1)}%`;
+  if (progresoEl) {
+    progresoEl.textContent = `${progreso.toFixed(1)}%`;
+    console.log('✅ goalProgreso actualizado');
+  } else {
+    console.warn('⚠️ Elemento goalProgreso no encontrado');
+  }
   
   // Actualizar porcentaje central del gauge
   const progressCenterEl = document.getElementById('goalProgressCenter');
-  if (progressCenterEl) progressCenterEl.textContent = `${progreso.toFixed(1)}%`;
+  if (progressCenterEl) {
+    progressCenterEl.textContent = `${progreso.toFixed(1)}%`;
+    console.log('✅ goalProgressCenter actualizado');
+  } else {
+    console.warn('⚠️ Elemento goalProgressCenter no encontrado');
+  }
   
   // Actualizar gráfico gauge
   renderGoalGauge(progreso);
