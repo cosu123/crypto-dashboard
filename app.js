@@ -410,6 +410,10 @@ function updateGoalChart() {
   const progresoEl = document.getElementById('goalProgreso');
   if (progresoEl) progresoEl.textContent = `${progreso.toFixed(1)}%`;
   
+  // Actualizar porcentaje central del gauge
+  const progressCenterEl = document.getElementById('goalProgressCenter');
+  if (progressCenterEl) progressCenterEl.textContent = `${progreso.toFixed(1)}%`;
+  
   // Actualizar gráfico gauge
   renderGoalGauge(progreso);
 }
