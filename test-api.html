@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test API Portafolio</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff88; }
+    pre { background: #000; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Test de Carga de Datos - Hoja Portafolio</h1>
+  <button onclick="testFetch()">Cargar Datos</button>
+  <button onclick="clearLog()">Limpiar</button>
+  <pre id="log"></pre>
+
+  <script>
+    const log = document.getElementById('log');
+    
+    function clearLog() {
+      log.textContent = '';
+    }
+    
+    async function testFetch() {
+      log.textContent = '🔄 Cargando datos...\n';
+      
+      try {
+        const sheetId = '1Bx0NizfyQjrLVkuHRLcWBK1_ZOFSRtF9vOql4IV5Ap4';
+        const sheetName = 'Portafolio';
+        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}&_=${Date.now()}`;
+        
+        log.textContent += `📡 URL: ${url}\n\n`;
+        
+        const response = await fetch(url, { 
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        });
+        
+        log.textContent += `✅ Response status: ${response.status}\n\n`;
+        
+        const text = await response.text();
+        log.textContent += `📄 Response length: ${text.length} chars\n\n`;
+        
+        const jsonText = text.substring(47).slice(0, -2);
+        const json = JSON.parse(jsonText);
+        
+        log.textContent += `📊 Rows: ${json.table.rows.length}\n`;
+        log.textContent += `📊 Cols: ${json.table.cols.length}\n\n`;
+        
+        // Mostrar primeras 5 filas
+        log.textContent += '📋 Primeras 5 filas:\n';
+        for (let i = 0; i < Math.min(5, json.table.rows.length); i++) {
+          const cells = json.table.rows[i].c;
+          const valores = cells.map(c => c?.v || 'null');
+          log.textContent += `  Fila ${i}: ${JSON.stringify(valores)}\n`;
+        }
+        
+        // Procesar datos
+        log.textContent += '\n🔄 Procesando datos...\n\n';
+        
+        const activosMap = new Map();
+        let transacciones = 0;
+        
+        // Detectar encabezado
+        let startIndex = 0;
+        const primeraFila = json.table.rows[0].c;
+        const primerValor = (primeraFila[0]?.v || '').toString().toLowerCase();
+        if (primerValor.includes('fecha') || primerValor.includes('date')) {
+          startIndex = 1;
+          log.textContent += '✅ Encabezado detectado, saltando fila 0\n\n';
+        }
+        
+        for (let i = startIndex; i < json.table.rows.length; i++) {
+          const cells = json.table.rows[i].c;
+          
+          const activo = (cells[1]?.v || '').toString().trim().toUpperCase();
+          const inversionUsdt = parseFloat(cells[2]?.v || 0);
+          const cantidad = parseFloat(cells[6]?.v || 0);
+          
+          if (!activo || inversionUsdt === 0 || cantidad === 0) continue;
+          if (!['BTC', 'ETH', 'SOL', 'LINK', 'AVAX', 'DOGE'].includes(activo)) continue;
+          
+          transacciones++;
+          
+          if (!activosMap.has(activo)) {
+            activosMap.set(activo, {
+              symbol: activo,
+              cantidadTotal: 0,
+              inversionTotal: 0
+            });
+          }
+          
+          const activoData = activosMap.get(activo);
+          activoData.cantidadTotal += cantidad;
+          activoData.inversionTotal += inversionUsdt;
+        }
+        
+        log.textContent += `✅ Procesadas ${transacciones} transacciones\n`;
+        log.textContent += `✅ Encontrados ${activosMap.size} activos diferentes\n\n`;
+        
+        let totalInvertido = 0;
+        for (const [symbol, data] of activosMap) {
+          totalInvertido += data.inversionTotal;
+          log.textContent += `  ${symbol}: Inversión=${data.inversionTotal.toFixed(2)} USDT, Cantidad=${data.cantidadTotal.toFixed(6)}\n`;
+        }
+        
+        log.textContent += `\n💰 TOTAL INVERTIDO: $${totalInvertido.toFixed(2)} USDT\n`;
+        
+      } catch (error) {
+        log.textContent += `\n❌ ERROR: ${error.message}\n`;
+        log.textContent += `Stack: ${error.stack}\n`;
+      }
+    }
+    
+    // Auto-ejecutar al cargar
+    window.addEventListener('load', testFetch);
+  </script>
+</body>
+</html>
