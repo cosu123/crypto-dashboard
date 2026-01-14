@@ -1,9 +1,10 @@
 // ============================================
-// HEIDI CRYPTO PORTFOLIO - APP.JS v4.0
+// HEIDI CRYPTO PORTFOLIO - APP.JS v4.1
 // Dashboard Premium - Solo hoja Portafolio
+// FIX: Selectores correctos para KPIs
 // ============================================
 
-console.log('%c🚀 HEIDI Dashboard v4.0 - Iniciando...', 'color: #00d4ff; font-size: 16px; font-weight: bold;');
+console.log('%c🚀 HEIDI Dashboard v4.1 - Iniciando...', 'color: #00d4ff; font-size: 16px; font-weight: bold;');
 
 // ============================================
 // ESTADO GLOBAL UNIFICADO
@@ -154,14 +155,6 @@ async function fetchSheetData(sheetName) {
 function processPortafolio(rows) {
   console.log('🔄 Procesando Portafolio...');
   console.log('📊 Total de filas recibidas:', rows.length);
-  
-  // Log de las primeras 5 filas para debugging
-  console.log('📋 Primeras 5 filas:');
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
-    const cells = rows[i].c;
-    const valores = cells.map(c => c?.v || c?.f || 'null');
-    console.log(`  Fila ${i}:`, valores);
-  }
   
   // Estructura de columnas:
   // A: Fecha
@@ -326,50 +319,73 @@ function renderAll() {
 function updateKPIs() {
   const kpis = state.kpis;
   
+  console.log('📊 Actualizando KPIs:', kpis);
+  
   // Total Invertido
-  const totalInvertidoEl = document.querySelector('[data-kpi="totalInvertido"]');
+  const totalInvertidoEl = document.getElementById('kpiInvertido');
   if (totalInvertidoEl) {
     totalInvertidoEl.textContent = `$${kpis.totalInvertido.toFixed(2)}`;
+    console.log('✅ Total Invertido actualizado:', totalInvertidoEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiInvertido no encontrado');
   }
   
   // Valor Actual
-  const valorActualEl = document.querySelector('[data-kpi="valorActual"]');
+  const valorActualEl = document.getElementById('kpiActual');
   if (valorActualEl) {
     valorActualEl.textContent = `$${kpis.valorActual.toFixed(2)}`;
+    console.log('✅ Valor Actual actualizado:', valorActualEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiActual no encontrado');
   }
   
   // P&L Total
-  const plTotalEl = document.querySelector('[data-kpi="plTotal"]');
+  const plTotalEl = document.getElementById('kpiPL');
   if (plTotalEl) {
     const signo = kpis.plTotal >= 0 ? '+' : '';
     plTotalEl.textContent = `${signo}$${kpis.plTotal.toFixed(2)}`;
     plTotalEl.style.color = kpis.plTotal >= 0 ? '#00ff88' : '#ff6b9d';
+    console.log('✅ P&L Total actualizado:', plTotalEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiPL no encontrado');
   }
   
-  // ROI Total
-  const roiTotalEl = document.querySelector('[data-kpi="roiTotal"]');
-  if (roiTotalEl) {
+  // ROI Percent
+  const roiPercentEl = document.getElementById('kpiPLPercent');
+  if (roiPercentEl) {
     const signo = kpis.roiTotal >= 0 ? '+' : '';
-    roiTotalEl.textContent = `${signo}${kpis.roiTotal.toFixed(2)}%`;
-    roiTotalEl.style.color = kpis.roiTotal >= 0 ? '#00ff88' : '#ff6b9d';
+    roiPercentEl.textContent = `${signo}${kpis.roiTotal.toFixed(2)}%`;
+    roiPercentEl.style.color = kpis.roiTotal >= 0 ? '#00ff88' : '#ff6b9d';
+    console.log('✅ ROI Percent actualizado:', roiPercentEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiPLPercent no encontrado');
   }
   
   // Activos
-  const activosEl = document.querySelector('[data-kpi="numActivos"]');
+  const activosEl = document.getElementById('kpiActivos');
   if (activosEl) {
     activosEl.textContent = kpis.numActivos;
+    console.log('✅ Activos actualizado:', activosEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiActivos no encontrado');
   }
   
   // Transacciones
-  const transaccionesEl = document.querySelector('[data-kpi="numTransacciones"]');
+  const transaccionesEl = document.getElementById('kpiTransacciones');
   if (transaccionesEl) {
     transaccionesEl.textContent = kpis.numTransacciones;
+    console.log('✅ Transacciones actualizado:', transaccionesEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiTransacciones no encontrado');
   }
   
   // Exchanges
-  const exchangesEl = document.querySelector('[data-kpi="numExchanges"]');
+  const exchangesEl = document.getElementById('kpiExchanges');
   if (exchangesEl) {
     exchangesEl.textContent = kpis.numExchanges;
+    console.log('✅ Exchanges actualizado:', exchangesEl.textContent);
+  } else {
+    console.error('❌ Elemento kpiExchanges no encontrado');
   }
   
   // Actualizar gráfico de objetivo
@@ -561,4 +577,4 @@ function updateStatus(status) {
   }
 }
 
-console.log('✅ App.js cargado correctamente');
+console.log('✅ App.js v4.1 cargado correctamente');
