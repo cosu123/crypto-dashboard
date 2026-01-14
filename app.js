@@ -153,6 +153,15 @@ async function fetchSheetData(sheetName) {
 
 function processResumenActivo(rows) {
   console.log('🔄 Procesando Resumen_Activo...');
+  console.log('📊 Total de filas recibidas:', rows.length);
+  
+  // Log de las primeras 10 filas para debugging
+  console.log('📋 Primeras 10 filas:');
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    const cells = rows[i].c;
+    const valores = cells.map(c => c?.v || c?.f || 'null');
+    console.log(`  Fila ${i}:`, valores);
+  }
   
   const activos = [];
   let totalInvertido = 0;
