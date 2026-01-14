@@ -12,13 +12,13 @@ const DASHBOARD_CONFIG = {
   
   // Mapeo de filas de resumen por activo
   // Las filas de resumen tienen la columna "Activos" con valor "Total {ACTIVO}/Usdt"
+  // NOTA: DOGE omitido por solicitud del usuario
   ACTIVOS_MAPPING: {
     'Total BTC/Usdt': 'BTC',
     'Total ETH/Usdt': 'ETH',
     'Total SOL/Usdt': 'SOL',
     'Total LINK/Usdt': 'LINK',
-    'Total AVAX/Usdt': 'AVAX',
-    'Total DOGE/Usdt': 'DOGE'
+    'Total AVAX/Usdt': 'AVAX'
   },
   
   // Colores por activo
@@ -27,8 +27,7 @@ const DASHBOARD_CONFIG = {
     ETH: '#627eea',
     SOL: '#14f195',
     LINK: '#2a5ada',
-    AVAX: '#e84142',
-    DOGE: '#c2a633'
+    AVAX: '#e84142'
   },
   
   // Íconos por activo (para watchlist)
@@ -37,8 +36,7 @@ const DASHBOARD_CONFIG = {
     ETH: 'Ξ',
     SOL: '◎',
     LINK: '⬡',
-    AVAX: '▲',
-    DOGE: 'Ð'
+    AVAX: '▲'
   },
   
   // Nombres completos
@@ -47,8 +45,7 @@ const DASHBOARD_CONFIG = {
     ETH: 'Ethereum',
     SOL: 'Solana',
     LINK: 'Chainlink',
-    AVAX: 'Avalanche',
-    DOGE: 'Dogecoin'
+    AVAX: 'Avalanche'
   },
   
   // Intervalo de actualización automática (ms)

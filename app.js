@@ -198,8 +198,9 @@ function processPortafolio(rows) {
       continue;
     }
     
-    // Validar que sea un activo conocido
-    if (!['BTC', 'ETH', 'SOL', 'LINK', 'AVAX', 'DOGE'].includes(activo)) {
+    // Validar que sea un activo conocido (OMITIR DOGE)
+    if (!['BTC', 'ETH', 'SOL', 'LINK', 'AVAX'].includes(activo)) {
+      console.log(`⏭️ Omitiendo activo: ${activo}`);
       continue;
     }
     
