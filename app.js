@@ -3,6 +3,8 @@
 // Dashboard Premium con datos reales
 // ============================================
 
+console.log('%c🚀 HEIDI Dashboard v3.0 - Iniciando...', 'color: #00d4ff; font-size: 16px; font-weight: bold;');
+
 // ============================================
 // ESTADO GLOBAL UNIFICADO
 // ============================================
