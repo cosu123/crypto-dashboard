@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test - Dashboard</title>
+  <style>
+    body {
+      background: #0a0e27;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+    }
+    .status {
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 8px;
+      border: 2px solid #00d4ff;
+    }
+    .success { background: rgba(0, 255, 136, 0.1); border-color: #00ff88; }
+    .error { background: rgba(255, 107, 157, 0.1); border-color: #ff6b9d; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Test de Carga de Scripts</h1>
+  
+  <div id="status1" class="status">
+    ⏳ Verificando carga de config.js...
+  </div>
+  
+  <div id="status2" class="status">
+    ⏳ Verificando carga de app.js...
+  </div>
+  
+  <div id="status3" class="status">
+    ⏳ Intentando cargar datos...
+  </div>
+  
+  <div id="results" style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+    <h2>Resultados:</h2>
+    <pre id="output" style="color: #00d4ff;"></pre>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const output = document.getElementById('output');
+    const status1 = document.getElementById('status1');
+    const status2 = document.getElementById('status2');
+    const status3 = document.getElementById('status3');
+    
+    function log(msg) {
+      output.textContent += msg + '\n';
+      console.log(msg);
+    }
+    
+    // Test 1: config.js
+    if (typeof DASHBOARD_CONFIG !== 'undefined') {
+      status1.className = 'status success';
+      status1.textContent = '✅ config.js cargado correctamente';
+      log('✅ DASHBOARD_CONFIG existe');
+      log('   Sheet ID: ' + DASHBOARD_CONFIG.SHEET_ID);
+    } else {
+      status1.className = 'status error';
+      status1.textContent = '❌ config.js NO se cargó';
+      log('❌ DASHBOARD_CONFIG no existe');
+    }
+    
+    // Test 2: app.js
+    if (typeof state !== 'undefined') {
+      status2.className = 'status success';
+      status2.textContent = '✅ app.js cargado correctamente';
+      log('✅ state existe');
+      log('   Activos: ' + state.activos.length);
+    } else {
+      status2.className = 'status error';
+      status2.textContent = '❌ app.js NO se cargó';
+      log('❌ state no existe');
+    }
+    
+    // Test 3: loadData
+    if (typeof loadData === 'function') {
+      status3.textContent = '⏳ Ejecutando loadData()...';
+      log('✅ loadData() existe, ejecutando...');
+      
+      loadData()
+        .then(() => {
+          status3.className = 'status success';
+          status3.textContent = '✅ Datos cargados correctamente';
+          log('✅ loadData() completado');
+          log('   Total Invertido: $' + state.kpis.totalInvertido);
+          log('   Valor Actual: $' + state.kpis.valorActual);
+          log('   Activos: ' + state.activos.length);
+        })
+        .catch(error => {
+          status3.className = 'status error';
+          status3.textContent = '❌ Error al cargar datos: ' + error.message;
+          log('❌ Error en loadData(): ' + error.message);
+        });
+    } else {
+      status3.className = 'status error';
+      status3.textContent = '❌ loadData() no está definida';
+      log('❌ loadData() no existe');
+    }
+  </script>
+</body>
+</html>
