@@ -84,7 +84,7 @@
           <div class="kpi-icon">💰</div>
           <div class="kpi-content">
             <div class="label">TOTAL INVERTIDO</div>
-            <div class="value" id="kpiInvertido" data-value="0">$0</div>
+            <div class="value" id="kpiInvertido" data-kpi="total-invertido" data-value="0">$0</div>
             <div class="hint">USDT</div>
           </div>
         </div>
@@ -92,7 +92,7 @@
           <div class="kpi-icon">📊</div>
           <div class="kpi-content">
             <div class="label">VALOR ACTUAL</div>
-            <div class="value" id="kpiActual" data-value="0">$0</div>
+            <div class="value" id="kpiActual" data-kpi="valor-actual" data-value="0">$0</div>
             <div class="hint">USDT</div>
           </div>
         </div>
@@ -100,15 +100,15 @@
           <div class="kpi-icon">💎</div>
           <div class="kpi-content">
             <div class="label">P&L TOTAL</div>
-            <div class="value" id="kpiPL" data-value="0">$0</div>
-            <div class="hint" id="kpiPLPercent">0%</div>
+            <div class="value" id="kpiPL" data-kpi="pl-total" data-value="0">$0</div>
+            <div class="hint" id="kpiPLPercent" data-kpi="roi-percent">0%</div>
           </div>
         </div>
         <div class="kpi">
           <div class="kpi-icon">🪙</div>
           <div class="kpi-content">
             <div class="label">ACTIVOS</div>
-            <div class="value" id="kpiActivos" data-value="0">0</div>
+            <div class="value" id="kpiActivos" data-kpi="activos" data-value="0">0</div>
             <div class="hint">Diferentes</div>
           </div>
         </div>
@@ -116,7 +116,7 @@
           <div class="kpi-icon">📈</div>
           <div class="kpi-content">
             <div class="label">TRANSACCIONES</div>
-            <div class="value" id="kpiTransacciones" data-value="0">0</div>
+            <div class="value" id="kpiTransacciones" data-kpi="transacciones" data-value="0">0</div>
             <div class="hint">Total</div>
           </div>
         </div>
@@ -124,7 +124,7 @@
           <div class="kpi-icon">🏦</div>
           <div class="kpi-content">
             <div class="label">EXCHANGES</div>
-            <div class="value" id="kpiExchanges" data-value="0">0</div>
+            <div class="value" id="kpiExchanges" data-kpi="exchanges" data-value="0">0</div>
             <div class="hint">Plataformas</div>
           </div>
         </div>
@@ -140,26 +140,38 @@
         </div>
       </div>
       <div style="padding: 2rem;">
-        <div class="goal-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-          <div style="text-align: center;">
-            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Inversión Actual</div>
-            <div style="font-size: 2rem; font-weight: bold; color: #fff;" id="goalCurrent">$0</div>
+        <!-- Grid de 2 columnas: Gauge + Stats -->
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: center;">
+          <!-- Gauge Chart -->
+          <div style="position: relative;">
+            <div class="canvasWrap" style="height: 200px; width: 200px; margin: 0 auto;">
+              <canvas id="goalChart"></canvas>
+            </div>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+              <div style="font-size: 2rem; font-weight: bold; color: #00ff88;" id="goalProgressCenter">0%</div>
+              <div style="font-size: 0.75rem; color: #888; margin-top: 0.25rem;">Completado</div>
+            </div>
           </div>
-          <div style="text-align: center;">
-            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Objetivo</div>
-            <div style="font-size: 2rem; font-weight: bold; color: #00d4ff;">$5,000</div>
+          
+          <!-- Stats Grid -->
+          <div class="goal-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+            <div class="goal-stat" style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+              <div class="goal-label" style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Inversión Actual</div>
+              <div class="goal-value" style="font-size: 1.75rem; font-weight: bold; color: #fff;">$0</div>
+            </div>
+            <div class="goal-stat" style="background: rgba(0,212,255,0.1); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(0,212,255,0.3);">
+              <div class="goal-label" style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Objetivo</div>
+              <div class="goal-value" style="font-size: 1.75rem; font-weight: bold; color: #00d4ff;">$5,000</div>
+            </div>
+            <div class="goal-stat" style="background: rgba(255,107,157,0.1); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,107,157,0.3);">
+              <div class="goal-label" style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Falta</div>
+              <div class="goal-value" style="font-size: 1.75rem; font-weight: bold; color: #ff6b9d;">$0</div>
+            </div>
+            <div class="goal-stat" style="background: rgba(0,255,136,0.1); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(0,255,136,0.3);">
+              <div class="goal-label" style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Progreso</div>
+              <div class="goal-value" style="font-size: 1.75rem; font-weight: bold; color: #00ff88;">0%</div>
+            </div>
           </div>
-          <div style="text-align: center;">
-            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Falta</div>
-            <div style="font-size: 2rem; font-weight: bold; color: #ff6b9d;" id="goalRemaining">$0</div>
-          </div>
-          <div style="text-align: center;">
-            <div style="font-size: 0.9rem; color: #888; margin-bottom: 0.5rem;">Progreso</div>
-            <div style="font-size: 2rem; font-weight: bold; color: #00ff88;" id="goalProgress">0%</div>
-          </div>
-        </div>
-        <div class="canvasWrap" style="height: 120px;">
-          <canvas id="goalChart"></canvas>
         </div>
       </div>
     </div>
