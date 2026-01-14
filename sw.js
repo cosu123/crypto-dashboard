@@ -1,92 +1,149 @@
-// Service Worker para funcionalidad offline
-const CACHE_NAME = 'crypto-dashboard-v1';
+// ============================================
+// SERVICE WORKER - HEIDI CRYPTO PORTFOLIO
+// Estrategia: Cache-first para assets, Network-only para Google Sheets
+// ============================================
+
+const CACHE_VERSION = 'crypto-dashboard-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
+  '/styles.css',
   '/app.js',
+  '/config.js',
   '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
 ];
 
-// Instalar Service Worker y cachear assets
+// Instalación: cachear assets estáticos
 self.addEventListener('install', (event) => {
-  console.log('[SW] Instalando Service Worker...');
+  console.log('[SW] Instalando Service Worker v2...');
+  
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches.open(CACHE_VERSION)
       .then((cache) => {
-        console.log('[SW] Cacheando assets');
+        console.log('[SW] Cacheando assets estáticos');
         return cache.addAll(ASSETS_TO_CACHE);
       })
-      .catch((err) => {
-        console.error('[SW] Error al cachear:', err);
+      .then(() => {
+        console.log('[SW] Assets cacheados exitosamente');
+        return self.skipWaiting();
+      })
+      .catch((error) => {
+        console.error('[SW] Error cacheando assets:', error);
       })
   );
-  self.skipWaiting();
 });
 
-// Activar Service Worker y limpiar cachés antiguos
+// Activación: limpiar cachés antiguos
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activando Service Worker...');
+  console.log('[SW] Activando Service Worker v2...');
+  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Eliminando caché antiguo:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_VERSION) {
+              console.log('[SW] Eliminando caché antiguo:', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      })
+      .then(() => {
+        console.log('[SW] Service Worker activado');
+        return self.clients.claim();
+      })
   );
-  self.clients.claim();
 });
 
-// Interceptar peticiones y servir desde caché cuando sea posible
+// Fetch: estrategia híbrida
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Estrategia: Network First para datos de Google Sheets, Cache First para assets
-  if (url.hostname === 'docs.google.com') {
-    // Network First para datos de Google Sheets
+  const url = new URL(event.request.url);
+  
+  // NUNCA cachear Google Sheets API - Network-only
+  if (url.hostname === 'docs.google.com' && url.pathname.includes('/gviz/tq')) {
+    console.log('[SW] Network-only para Google Sheets:', url.pathname);
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Guardar respuesta en caché
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
+      fetch(event.request, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
+        .catch((error) => {
+          console.error('[SW] Error fetching Google Sheets:', error);
+          return new Response(JSON.stringify({ error: 'No hay conexión a internet' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
           });
-          return response;
-        })
-        .catch(() => {
-          // Si falla, intentar desde caché
-          return caches.match(request);
         })
     );
-  } else {
-    // Cache First para assets locales
-    event.respondWith(
-      caches.match(request)
-        .then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          return fetch(request).then((response) => {
-            // Cachear nuevos recursos
-            if (request.method === 'GET') {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, responseClone);
-              });
+    return;
+  }
+  
+  // Cache-first para assets estáticos
+  event.respondWith(
+    caches.match(event.request)
+      .then((cachedResponse) => {
+        if (cachedResponse) {
+          console.log('[SW] Sirviendo desde caché:', event.request.url);
+          return cachedResponse;
+        }
+        
+        console.log('[SW] Fetching desde red:', event.request.url);
+        return fetch(event.request)
+          .then((response) => {
+            // Solo cachear respuestas exitosas
+            if (!response || response.status !== 200 || response.type === 'error') {
+              return response;
             }
+            
+            // Cachear la respuesta para futuras solicitudes
+            const responseToCache = response.clone();
+            caches.open(CACHE_VERSION)
+              .then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+            
             return response;
+          })
+          .catch((error) => {
+            console.error('[SW] Error fetching:', error);
+            // Intentar servir desde caché como fallback
+            return caches.match('/index.html');
           });
-        })
+      })
+  );
+});
+
+// Sincronización en segundo plano (opcional)
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-portfolio') {
+    console.log('[SW] Sincronizando portafolio en segundo plano...');
+    event.waitUntil(
+      Promise.resolve()
     );
   }
+});
+
+// Notificaciones push (opcional)
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push recibido');
+  
+  const options = {
+    body: event.data ? event.data.text() : 'Actualización del portafolio disponible',
+    icon: '/icon-192.png',
+    badge: '/badge-72.png',
+    vibrate: [200, 100, 200],
+    tag: 'portfolio-update'
+  };
+  
+  event.waitUntil(
+    self.registration.showNotification('HEIDI Crypto Portfolio', options)
+  );
 });
 
 // Manejar mensajes del cliente
@@ -95,3 +152,5 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+console.log('[SW] Service Worker cargado correctamente');
